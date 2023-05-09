@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+//usage: jsc <file> <output file>
+//made by Ayden Horne
+
+const fs = require('fs');
+var args = process.argv.slice(2);
+const alphabet = Array.from(Array(26)).map((val,i)=> String.fromCharCode(i+97));
+const colors = [30, 31, 32, 33, 34, 35, 36, 37]
+
+//ANSI color coding system
+//used in feedback
+const nc = '\033[0m';
+function clr(x, y){
+	return '\033['+x+';'+colors[y]+'m';
+};
+
+//base error handling system
+//for syntax or arg errors
+function syntaxError(statement, msg, line){
+	if(!statement){ return };
+	console.log(clr(1,1)+'Syntax Error '+nc+`at chunk ${line+1} of ${args[0]}: \n\t`+msg);
+	process.exit(1);
+}
+function argsError(statement, msg){
+	if(!statement){ return };
+	console.log(clr(1,1)+"Invalid Args "+nc+msg+clr(0,5)+"usage: ./jsc <file> <output file>"+nc);
+	process.exit(9);
+}
+
+//operators and their functions
+//convert j5 statements into js
+const operators = {
+	"@": (variable, info, i) => {
+		//generate variables
+		function charCode(char){ return char.charCodeAt(0)-96 };
+
+		syntaxError((charCode(variable) > 26 || charCode(variable) < 0 || variable.length > 1), "Invalid Variable in declaration", i);
+
+		let list = Array.from(Array(alphabet.indexOf(variable)+1))
+		.map((val, i) => { return alphabet[i] + "=0" });
+
+		return "var "+list.join(", ")+';\n';
+	}, 
+	">": (variable, info, i) => {
+		//print 1st half
+		return "console.log("+variable+');\n';
+	},
+	"<": (variable, info, i) => {
+		//assign to 1st half
+		return variable+" = "+info+';\n';
+	}
+};
+
+//processes terminal command
+//and prepares to read file
+argsError(!args[0], "No file provided.\n");
+if(!args[1]){ args[1] = args[0].split('.')[0] + '.js' };
+try { fs.accessSync(args[0]) } catch (e) {
+	argsError(true, `Cannot find or access file '${args[0]}'.\n`);
+};
+
+let compiled = "";
+file = fs.readFileSync(args[0], {encoding: 'utf8'});
+file = file.replace(/(\r\n|\n|\r| )/gm,"").split(';');
+if(file[file.length] == ''){ file.pop() };
+
+//generate a compiled text 
+//one chunk at a time
+file.forEach((chunk, i, arr) => {
+	if(!chunk || chunk.length==0){ return false };
+
+	//locate operator
+	let ops = [], indexs = [];
+	chunk.split("").forEach((val, i, arr) => { if(Object.keys(operators).includes(val)){ 
+		ops.push(val); 
+		indexs.push(i);
+	}})
+
+	//error handle
+	syntaxError(ops.length==0, "No operator used", i);
+	syntaxError(ops.length>1, "More than one operator used", i);
+	syntaxError(indexs[0]==0, "No variable or expression used", i);
+
+	//process statement
+	compiled += operators[ops[0]](chunk.substr(0, indexs[0]), chunk.substr(indexs[0]+1), i);
+});
+
+//finshed compiling, write to file
+fs.writeFileSync(args[1], compiled);
+process.exit(0);
